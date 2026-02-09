@@ -5,6 +5,8 @@ namespace App\Jobs;
 use App\Events\KillFeedEvent;
 use App\Models\EventFrag;
 use App\Models\Player;
+use App\Models\Weapon;
+use App\Services\SkillCalculator;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -22,7 +24,7 @@ class ProcessLogEvent implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(): void
+    public function handle(SkillCalculator $skillCalculator): void
     {
         // Only process kill events
         if ($this->eventData['type'] !== 'kill') {
@@ -43,6 +45,7 @@ class ProcessLogEvent implements ShouldQueue
             ['steam_id' => $this->eventData['killer']['steam_id']],
             $killerAttributes
         );
+        $killer->refresh(); // Ensure skill default value is loaded
 
         // Prepare victim creation attributes
         $victimAttributes = ['game_code' => $server->game_code];
@@ -55,6 +58,12 @@ class ProcessLogEvent implements ShouldQueue
             ['steam_id' => $this->eventData['victim']['steam_id']],
             $victimAttributes
         );
+        $victim->refresh(); // Ensure skill default value is loaded
+
+        // Load weapon for skill calculation
+        $weapon = Weapon::where('code', $this->eventData['weapon'])
+            ->where('game_code', $server->game_code)
+            ->firstOrFail();
 
         // Extract killer position coordinates (optional)
         $killerPosition = $this->eventData['killer']['position'] ?? null;
@@ -76,6 +85,18 @@ class ProcessLogEvent implements ShouldQueue
         // Update player statistics
         $killer->increment('kills');
         $victim->increment('deaths');
+
+        // Calculate and update skill ratings
+        $newKillerSkill = $skillCalculator->calculateKillSkill(
+            $killer,
+            $victim,
+            $weapon,
+            $this->eventData['headshot']
+        );
+        $newVictimSkill = $skillCalculator->calculateDeathSkill($victim, $killer);
+
+        $killer->update(['skill' => $newKillerSkill]);
+        $victim->update(['skill' => $newVictimSkill]);
 
         // Broadcast kill feed event
         event(new KillFeedEvent($eventFrag));
