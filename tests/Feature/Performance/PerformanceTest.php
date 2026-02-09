@@ -109,8 +109,6 @@ test('weapon statistics query performs well', function () {
         ->and($executionTime)->toBeLessThan(0.5);
 });
 
-
-
 test('concurrent player updates maintain consistency', function () {
     $player = Player::factory()->create(['kills' => 0]);
 
@@ -119,7 +117,7 @@ test('concurrent player updates maintain consistency', function () {
         return [
             'type' => 'kill',
             'killer_steamid' => $player->steam_id,
-            'victim_steamid' => 'STEAM_1:0:' . $i,
+            'victim_steamid' => 'STEAM_1:0:'.$i,
             'weapon' => $this->weapon->code,
             'headshot' => false,
             'map' => 'de_dust2',
@@ -142,7 +140,7 @@ test('leaderboard query with pagination performs well', function () {
 
     $startTime = microtime(true);
 
-    $response = $this->getJson('/api/players/rankings?per_page=50&page=1');
+    $response = $this->getJson('/api/players/rankings?game=csgo&per_page=50&page=1');
 
     $executionTime = microtime(true) - $startTime;
 
@@ -158,7 +156,7 @@ test('database queries use proper indexes', function () {
     // Enable query log
     DB::enableQueryLog();
 
-    Player::where('steamid', 'STEAM_1:0:12345')->first();
+    Player::where('steam_id', 'STEAM_1:0:12345')->first();
 
     $queries = DB::getQueryLog();
     $query = $queries[0];
@@ -211,11 +209,11 @@ test('aggregated statistics calculation performs well', function () {
 
 test('player search performs efficiently', function () {
     Player::factory()->count(1000)->create();
-    Player::factory()->create(['name' => 'UniquePlayerName']);
+    Player::factory()->create(['last_name' => 'UniquePlayerName']);
 
     $startTime = microtime(true);
 
-    $results = Player::where('name', 'like', '%UniquePlayer%')->get();
+    $results = Player::where('last_name', 'like', '%UniquePlayer%')->get();
 
     $executionTime = microtime(true) - $startTime;
 
@@ -224,6 +222,9 @@ test('player search performs efficiently', function () {
 });
 
 test('server statistics aggregation scales well', function () {
+    // Don't use beforeEach server for this test
+    $this->server->delete();
+
     $servers = Server::factory()->count(10)->create();
     $players = Player::factory()->count(50)->create();
 
@@ -247,7 +248,7 @@ test('server statistics aggregation scales well', function () {
 });
 
 test('bulk event processing maintains performance', function () {
-    $killer = Player::factory()->create();
+    $killer = Player::factory()->create(['kills' => 0]);
     $victims = Player::factory()->count(50)->create();
 
     $events = $victims->map(function ($victim) use ($killer) {

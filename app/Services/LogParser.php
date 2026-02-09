@@ -134,4 +134,28 @@ class LogParser
     {
         return Carbon::createFromFormat('m/d/Y - H:i:s', $timestamp);
     }
+
+    /**
+     * Parse a kill event from a log line and return in flat format
+     */
+    public function parseKillEvent(string $logLine): ?array
+    {
+        $event = $this->parse($logLine);
+
+        if ($event === null || $event['type'] !== 'kill') {
+            return null;
+        }
+
+        // Convert nested format to flat format for easier testing
+        return [
+            'type' => 'kill',
+            'killer_steamid' => $event['killer']['steam_id'],
+            'killer_name' => $event['killer']['name'],
+            'victim_steamid' => $event['victim']['steam_id'],
+            'victim_name' => $event['victim']['name'],
+            'weapon' => $event['weapon'],
+            'headshot' => $event['headshot'],
+            'timestamp' => $event['timestamp'],
+        ];
+    }
 }

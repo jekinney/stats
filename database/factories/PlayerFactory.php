@@ -34,11 +34,11 @@ class PlayerFactory extends Factory
     }
 
     /**
-     * Override attributes after making
+     * Configure the model factory.
      */
-    public function afterMaking(callable|\Closure $callback): static
+    public function configure(): static
     {
-        return parent::afterMaking(function (\App\Models\Player $player) use ($callback) {
+        return $this->afterMaking(function (\App\Models\Player $player) {
             // Ensure the game exists before creating the player
             \App\Models\Game::firstOrCreate(
                 ['code' => $player->game_code],
@@ -54,8 +54,6 @@ class PlayerFactory extends Factory
                     'enabled' => true,
                 ]
             );
-
-            $callback($player);
         });
     }
 
@@ -67,12 +65,5 @@ class PlayerFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'last_name' => $name,
         ]);
-    }
-                        default => $player->game_code,
-                    },
-                    'enabled' => true,
-                ]
-            );
-        });
     }
 }

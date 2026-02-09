@@ -39,40 +39,37 @@ class ProcessLogEvent implements ShouldQueue
         // Extract killer and victim steam IDs (support both flat and nested structures)
         $killerSteamId = $this->eventData['killer']['steam_id'] ?? $this->eventData['killer_steamid'];
         $victimSteamId = $this->eventData['victim']['steam_id'] ?? $this->eventData['victim_steamid'];
-        $killerName = $this->eventData['killer']['name'] ?? null;
-        $victimName = $this->eventData['victim']['name'] ?? null;
-
-        // Prepare killer creation attributes
-        $killerAttributes = ['game_code' => $server->game_code];
-        if ($killerName) {
-            $killerAttributes['last_name'] = $killerName;
-        }
+        $killerName = $this->eventData['killer']['name'] ?? $this->eventData['killer_name'] ?? "Player_{$killerSteamId}";
+        $victimName = $this->eventData['victim']['name'] ?? $this->eventData['victim_name'] ?? "Player_{$victimSteamId}";
 
         // Find or create killer player
         $killer = Player::firstOrCreate(
             ['steam_id' => $killerSteamId],
-            $killerAttributes
+            [
+                'game_code' => $server->game_code,
+                'last_name' => $killerName,
+            ]
         );
         $killer->refresh(); // Ensure skill default value is loaded
-
-        // Prepare victim creation attributes
-        $victimAttributes = ['game_code' => $server->game_code];
-        if ($victimName) {
-            $victimAttributes['last_name'] = $victimName;
-        }
 
         // Find or create victim player
         $victim = Player::firstOrCreate(
             ['steam_id' => $victimSteamId],
-            $victimAttributes
+            [
+                'game_code' => $server->game_code,
+                'last_name' => $victimName,
+            ]
         );
         $victim->refresh(); // Ensure skill default value is loaded
 
         // Load or create weapon
         $weaponCode = $this->eventData['weapon'];
         $weapon = Weapon::firstOrCreate(
-            ['code' => $weaponCode, 'game_code' => $server->game_code],
-            ['name' => ucfirst($weaponCode)]
+            ['code' => $weaponCode],
+            [
+                'game_code' => $server->game_code,
+                'name' => ucfirst($weaponCode),
+            ]
         );
 
         // Extract killer position coordinates (optional)

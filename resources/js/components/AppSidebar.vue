@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, Folder, LayoutGrid } from 'lucide-vue-next';
+import {
+    Trophy,
+    Users,
+    Crosshair,
+    Server,
+    LayoutGrid,
+    BarChart3,
+} from 'lucide-vue-next';
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -23,18 +30,28 @@ const mainNavItems: NavItem[] = [
         href: dashboard(),
         icon: LayoutGrid,
     },
+    {
+        title: 'Players',
+        href: '/players',
+        icon: Users,
+    },
+    {
+        title: 'Weapons',
+        href: '/weapons',
+        icon: Crosshair,
+    },
+    {
+        title: 'Servers',
+        href: '/servers',
+        icon: Server,
+    },
 ];
 
 const footerNavItems: NavItem[] = [
     {
-        title: 'Github Repo',
-        href: 'https://github.com/laravel/vue-starter-kit',
-        icon: Folder,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#vue',
-        icon: BookOpen,
+        title: 'API Health',
+        href: '/api/health',
+        icon: BarChart3,
     },
 ];
 </script>
