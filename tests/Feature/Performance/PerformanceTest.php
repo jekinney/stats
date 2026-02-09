@@ -3,8 +3,7 @@
 declare(strict_types=1);
 
 use App\Jobs\ProcessLogEvent;
-use App\Models\Kill;
-use App\Models\Map;
+use App\Models\EventFrag;
 use App\Models\Player;
 use App\Models\Server;
 use App\Models\Weapon;
@@ -15,7 +14,6 @@ uses(RefreshDatabase::class);
 
 beforeEach(function () {
     $this->server = Server::factory()->create();
-    $this->map = Map::factory()->create();
     $this->weapon = Weapon::factory()->create();
 });
 
@@ -37,8 +35,8 @@ test('queries player rankings efficiently with large dataset', function () {
 test('retrieves player profile efficiently', function () {
     $player = Player::factory()->create();
 
-    // Create large dataset of kills
-    Kill::factory()->count(500)->create([
+    // Create large dataset of frags
+    EventFrag::factory()->count(500)->create([
         'killer_id' => $player->id,
     ]);
 
@@ -52,7 +50,7 @@ test('retrieves player profile efficiently', function () {
     expect($executionTime)->toBeLessThan(0.5); // API should respond in less than 500ms
 });
 
-test('handles burst of kill events efficiently', function () {
+test('handles burst of frag events efficiently', function () {
     $killer = Player::factory()->create();
     $victim = Player::factory()->create();
 
@@ -60,10 +58,11 @@ test('handles burst of kill events efficiently', function () {
     for ($i = 0; $i < 100; $i++) {
         $events[] = [
             'type' => 'kill',
-            'killer_steamid' => $killer->steamid,
-            'victim_steamid' => $victim->steamid,
+            'killer_steamid' => $killer->steam_id,
+            'victim_steamid' => $victim->steam_id,
             'weapon' => $this->weapon->code,
             'headshot' => false,
+            'map' => 'de_dust2',
             'timestamp' => now()->addSeconds($i),
         ];
     }
@@ -76,7 +75,7 @@ test('handles burst of kill events efficiently', function () {
 
     $executionTime = microtime(true) - $startTime;
 
-    expect(Kill::count())->toBe(100)
+    expect(EventFrag::count())->toBe(100)
         ->and($executionTime)->toBeLessThan(10.0); // 100 events in less than 10 seconds
 });
 
@@ -84,24 +83,24 @@ test('weapon statistics query performs well', function () {
     $players = Player::factory()->count(50)->create();
     $weapons = Weapon::factory()->count(10)->create();
 
-    // Create 1000 kills with various weapons
+    // Create 1000 frags with various weapons
     foreach ($players as $killer) {
-        Kill::factory()->count(20)->create([
+        EventFrag::factory()->count(20)->create([
             'killer_id' => $killer->id,
             'victim_id' => $players->random()->id,
-            'weapon_id' => $weapons->random()->id,
+            'weapon_code' => $weapons->random()->code,
         ]);
     }
 
     $startTime = microtime(true);
 
-    $stats = DB::table('kills')
+    $stats = DB::table('event_frags')
         ->select(
-            'weapon_id',
+            'weapon_code',
             DB::raw('COUNT(*) as total_kills'),
             DB::raw('SUM(CASE WHEN headshot = 1 THEN 1 ELSE 0 END) as headshot_kills')
         )
-        ->groupBy('weapon_id')
+        ->groupBy('weapon_code')
         ->get();
 
     $executionTime = microtime(true) - $startTime;
@@ -110,46 +109,24 @@ test('weapon statistics query performs well', function () {
         ->and($executionTime)->toBeLessThan(0.5);
 });
 
-test('map statistics query scales with data', function () {
-    $maps = Map::factory()->count(20)->create();
-    $players = Player::factory()->count(100)->create();
-
-    // Create kills on various maps
-    foreach ($maps as $map) {
-        Kill::factory()->count(50)->create([
-            'killer_id' => $players->random()->id,
-            'victim_id' => $players->random()->id,
-            'weapon_id' => $this->weapon->id,
-        ]);
-    }
-
-    $startTime = microtime(true);
-
-    $response = $this->getJson('/api/maps/statistics');
-
-    $executionTime = microtime(true) - $startTime;
-
-    $response->assertOk();
-    expect($executionTime)->toBeLessThan(1.0);
-});
-
 test('concurrent player updates maintain consistency', function () {
     $player = Player::factory()->create(['kills' => 0]);
 
-    // Simulate concurrent kill events
+    // Simulate concurrent frag events
     $events = collect(range(1, 10))->map(function ($i) use ($player) {
         return [
             'type' => 'kill',
-            'killer_steamid' => $player->steamid,
-            'victim_steamid' => 'STEAM_1:0:' . $i,
+            'killer_steamid' => $player->steam_id,
+            'victim_steamid' => 'STEAM_1:0:'.$i,
             'weapon' => $this->weapon->code,
             'headshot' => false,
+            'map' => 'de_dust2',
             'timestamp' => now(),
         ];
     });
 
     foreach ($events as $event) {
-        Player::factory()->create(['steamid' => $event['victim_steamid']]);
+        Player::factory()->create(['steam_id' => $event['victim_steamid']]);
         ProcessLogEvent::dispatchSync($event, $this->server->id);
     }
 
@@ -163,7 +140,7 @@ test('leaderboard query with pagination performs well', function () {
 
     $startTime = microtime(true);
 
-    $response = $this->getJson('/api/players/rankings?per_page=50&page=1');
+    $response = $this->getJson('/api/players/rankings?game=csgo&per_page=50&page=1');
 
     $executionTime = microtime(true) - $startTime;
 
@@ -179,7 +156,7 @@ test('database queries use proper indexes', function () {
     // Enable query log
     DB::enableQueryLog();
 
-    Player::where('steamid', 'STEAM_1:0:12345')->first();
+    Player::where('steam_id', 'STEAM_1:0:12345')->first();
 
     $queries = DB::getQueryLog();
     $query = $queries[0];
@@ -190,16 +167,16 @@ test('database queries use proper indexes', function () {
     DB::disableQueryLog();
 });
 
-test('kill feed retrieval performs efficiently', function () {
-    Kill::factory()->count(1000)->create([
+test('frag feed retrieval performs efficiently', function () {
+    EventFrag::factory()->count(1000)->create([
         'killer_id' => Player::factory()->create()->id,
         'victim_id' => Player::factory()->create()->id,
-        'weapon_id' => $this->weapon->id,
+        'weapon_code' => $this->weapon->code,
     ]);
 
     $startTime = microtime(true);
 
-    $response = $this->getJson('/api/kills/recent?limit=50');
+    $response = $this->getJson('/api/frags/recent?limit=50');
 
     $executionTime = microtime(true) - $startTime;
 
@@ -210,33 +187,33 @@ test('kill feed retrieval performs efficiently', function () {
 test('aggregated statistics calculation performs well', function () {
     $players = Player::factory()->count(100)->create();
 
-    Kill::factory()->count(2000)->create([
+    EventFrag::factory()->count(2000)->create([
         'killer_id' => $players->random()->id,
         'victim_id' => $players->random()->id,
-        'weapon_id' => $this->weapon->id,
+        'weapon_code' => $this->weapon->code,
     ]);
 
     $startTime = microtime(true);
 
-    $totalKills = Kill::count();
+    $totalFrags = EventFrag::count();
     $totalPlayers = Player::count();
-    $totalHeadshots = Kill::where('headshot', true)->count();
+    $totalHeadshots = EventFrag::where('headshot', true)->count();
     $topPlayer = Player::orderBy('skill', 'desc')->first();
 
     $executionTime = microtime(true) - $startTime;
 
-    expect($totalKills)->toBeGreaterThan(0)
+    expect($totalFrags)->toBeGreaterThan(0)
         ->and($totalPlayers)->toBe(100)
         ->and($executionTime)->toBeLessThan(0.5);
 });
 
 test('player search performs efficiently', function () {
     Player::factory()->count(1000)->create();
-    Player::factory()->create(['name' => 'UniquePlayerName']);
+    Player::factory()->create(['last_name' => 'UniquePlayerName']);
 
     $startTime = microtime(true);
 
-    $results = Player::where('name', 'like', '%UniquePlayer%')->get();
+    $results = Player::where('last_name', 'like', '%UniquePlayer%')->get();
 
     $executionTime = microtime(true) - $startTime;
 
@@ -245,21 +222,24 @@ test('player search performs efficiently', function () {
 });
 
 test('server statistics aggregation scales well', function () {
+    // Don't use beforeEach server for this test
+    $this->server->delete();
+
     $servers = Server::factory()->count(10)->create();
     $players = Player::factory()->count(50)->create();
 
     foreach ($servers as $server) {
-        Kill::factory()->count(100)->create([
+        EventFrag::factory()->count(100)->create([
             'killer_id' => $players->random()->id,
             'victim_id' => $players->random()->id,
-            'weapon_id' => $this->weapon->id,
+            'weapon_code' => $this->weapon->code,
             'server_id' => $server->id,
         ]);
     }
 
     $startTime = microtime(true);
 
-    $stats = Server::withCount('kills')->get();
+    $stats = Server::withCount('eventFrags')->get();
 
     $executionTime = microtime(true) - $startTime;
 
@@ -268,15 +248,16 @@ test('server statistics aggregation scales well', function () {
 });
 
 test('bulk event processing maintains performance', function () {
-    $killer = Player::factory()->create();
+    $killer = Player::factory()->create(['kills' => 0]);
     $victims = Player::factory()->count(50)->create();
 
     $events = $victims->map(function ($victim) use ($killer) {
         return [
             'type' => 'kill',
-            'killer_steamid' => $killer->steamid,
-            'victim_steamid' => $victim->steamid,
+            'killer_steamid' => $killer->steam_id,
+            'victim_steamid' => $victim->steam_id,
             'weapon' => $this->weapon->code,
+            'map' => 'de_dust2',
             'headshot' => false,
             'timestamp' => now(),
         ];

@@ -17,11 +17,12 @@ class PlayerFactory extends Factory
     public function definition(): array
     {
         $gameCode = fake()->randomElement(['csgo', 'tf2', 'css', 'l4d2', 'dods']);
+        $name = fake()->userName();
 
         return [
             'game_code' => $gameCode,
             'steam_id' => 'STEAM_1:'.fake()->numberBetween(0, 1).':'.fake()->numberBetween(10000, 99999999),
-            'last_name' => fake()->userName(),
+            'last_name' => $name,
             'skill' => fake()->randomFloat(2, 500, 3000),
             'kills' => fake()->numberBetween(0, 10000),
             'deaths' => fake()->numberBetween(0, 10000),
@@ -54,5 +55,15 @@ class PlayerFactory extends Factory
                 ]
             );
         });
+    }
+
+    /**
+     * State for creating a player with a specific name.
+     */
+    public function withName(string $name): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'last_name' => $name,
+        ]);
     }
 }

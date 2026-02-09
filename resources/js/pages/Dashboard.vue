@@ -1,9 +1,38 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
+import LiveStats from '@/components/LiveStats.vue';
+import KillFeed from '@/components/KillFeed.vue';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
-import PlaceholderPattern from '../components/PlaceholderPattern.vue';
+
+interface TopPlayer {
+    id: number;
+    name: string;
+    skill: number;
+    kills: number;
+}
+
+interface RecentKill {
+    id: number;
+    killer: string;
+    victim: string;
+    weapon: string;
+    headshot: boolean;
+}
+
+interface DashboardStats {
+    total_players: number;
+    active_servers: number;
+    total_kills: number;
+    kills_last_hour: number;
+    top_player: TopPlayer;
+    recent_kills: RecentKill[];
+}
+
+defineProps<{
+    stats: DashboardStats;
+}>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -17,30 +46,17 @@ const breadcrumbs: BreadcrumbItem[] = [
     <Head title="Dashboard" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div
-            class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4"
-        >
-            <div class="grid auto-rows-min gap-4 md:grid-cols-3">
-                <div
-                    class="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border"
-                >
-                    <PlaceholderPattern />
-                </div>
-                <div
-                    class="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border"
-                >
-                    <PlaceholderPattern />
-                </div>
-                <div
-                    class="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border"
-                >
-                    <PlaceholderPattern />
-                </div>
+        <div class="flex h-full flex-1 flex-col gap-6 p-6">
+            <!-- Live Stats Component -->
+            <div>
+                <h2 class="mb-4 text-2xl font-bold">Live Statistics</h2>
+                <LiveStats :stats="stats" />
             </div>
-            <div
-                class="relative min-h-[100vh] flex-1 rounded-xl border border-sidebar-border/70 md:min-h-min dark:border-sidebar-border"
-            >
-                <PlaceholderPattern />
+
+            <!-- Recent Kill Feed -->
+            <div>
+                <h2 class="mb-4 text-2xl font-bold">Recent Kills</h2>
+                <KillFeed :kills="stats.recent_kills" />
             </div>
         </div>
     </AppLayout>
