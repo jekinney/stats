@@ -27,13 +27,13 @@ beforeEach(function () {
     ]);
 
     $this->killer = Player::factory()->create([
-        'steamid' => 'STEAM_1:0:12345',
+        'steam_id' => 'STEAM_1:0:12345',
         'name' => 'Killer',
         'skill' => 1000,
     ]);
 
     $this->victim = Player::factory()->create([
-        'steamid' => 'STEAM_1:0:67890',
+        'steam_id' => 'STEAM_1:0:67890',
         'name' => 'Victim',
         'skill' => 1000,
     ]);
@@ -223,11 +223,11 @@ test('handles missing player gracefully by creating them', function () {
         'timestamp' => now(),
     ];
 
-    expect(Player::where('steamid', $newSteamId)->exists())->toBeFalse();
+    expect(Player::where('steam_id', $newSteamId)->exists())->toBeFalse();
 
     ProcessLogEvent::dispatchSync($event, $this->server->id);
 
-    expect(Player::where('steamid', $newSteamId)->exists())->toBeTrue();
+    expect(Player::where('steam_id', $newSteamId)->exists())->toBeTrue();
     expect(EventFrag::count())->toBe(1);
 });
 
