@@ -18,7 +18,8 @@ class ProcessLogEvent implements ShouldQueue
      * Create a new job instance.
      */
     public function __construct(
-        private array $eventData
+        private array $eventData,
+        private ?int $serverId = null
     ) {}
 
     /**
@@ -31,51 +32,63 @@ class ProcessLogEvent implements ShouldQueue
             return;
         }
 
-        // Load server to get game_code for player creation
-        $server = \App\Models\Server::findOrFail($this->eventData['server_id']);
+        // Get server_id from constructor parameter or event data
+        $serverId = $this->serverId ?? $this->eventData['server_id'];
+        $server = \App\Models\Server::findOrFail($serverId);
+
+        // Extract killer and victim steam IDs (support both flat and nested structures)
+        $killerSteamId = $this->eventData['killer']['steam_id'] ?? $this->eventData['killer_steamid'];
+        $victimSteamId = $this->eventData['victim']['steam_id'] ?? $this->eventData['victim_steamid'];
+        $killerName = $this->eventData['killer']['name'] ?? null;
+        $victimName = $this->eventData['victim']['name'] ?? null;
 
         // Prepare killer creation attributes
         $killerAttributes = ['game_code' => $server->game_code];
-        if (isset($this->eventData['killer']['name'])) {
-            $killerAttributes['last_name'] = $this->eventData['killer']['name'];
+        if ($killerName) {
+            $killerAttributes['last_name'] = $killerName;
         }
 
         // Find or create killer player
         $killer = Player::firstOrCreate(
-            ['steam_id' => $this->eventData['killer']['steam_id']],
+            ['steam_id' => $killerSteamId],
             $killerAttributes
         );
         $killer->refresh(); // Ensure skill default value is loaded
 
         // Prepare victim creation attributes
         $victimAttributes = ['game_code' => $server->game_code];
-        if (isset($this->eventData['victim']['name'])) {
-            $victimAttributes['last_name'] = $this->eventData['victim']['name'];
+        if ($victimName) {
+            $victimAttributes['last_name'] = $victimName;
         }
 
         // Find or create victim player
         $victim = Player::firstOrCreate(
-            ['steam_id' => $this->eventData['victim']['steam_id']],
+            ['steam_id' => $victimSteamId],
             $victimAttributes
         );
         $victim->refresh(); // Ensure skill default value is loaded
 
-        // Load weapon for skill calculation
-        $weapon = Weapon::where('code', $this->eventData['weapon'])
-            ->where('game_code', $server->game_code)
-            ->firstOrFail();
+        // Load or create weapon
+        $weaponCode = $this->eventData['weapon'];
+        $weapon = Weapon::firstOrCreate(
+            ['code' => $weaponCode, 'game_code' => $server->game_code],
+            ['name' => ucfirst($weaponCode)]
+        );
 
         // Extract killer position coordinates (optional)
         $killerPosition = $this->eventData['killer']['position'] ?? null;
 
+        // Get map from event data or server
+        $map = $this->eventData['map'] ?? $server->map;
+
         // Create event frag record
         $eventFrag = EventFrag::create([
-            'server_id' => $this->eventData['server_id'],
+            'server_id' => $serverId,
             'killer_id' => $killer->id,
             'victim_id' => $victim->id,
-            'weapon_code' => $this->eventData['weapon'],
+            'weapon_code' => $weaponCode,
             'headshot' => $this->eventData['headshot'],
-            'map' => $server->map,
+            'map' => $map,
             'pos_x' => $killerPosition[0] ?? null,
             'pos_y' => $killerPosition[1] ?? null,
             'pos_z' => $killerPosition[2] ?? null,
@@ -84,6 +97,9 @@ class ProcessLogEvent implements ShouldQueue
 
         // Update player statistics
         $killer->increment('kills');
+        if ($this->eventData['headshot']) {
+            $killer->increment('headshots');
+        }
         $victim->increment('deaths');
 
         // Calculate and update skill ratings

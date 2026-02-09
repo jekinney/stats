@@ -17,11 +17,12 @@ class PlayerFactory extends Factory
     public function definition(): array
     {
         $gameCode = fake()->randomElement(['csgo', 'tf2', 'css', 'l4d2', 'dods']);
+        $name = fake()->userName();
 
         return [
             'game_code' => $gameCode,
             'steam_id' => 'STEAM_1:'.fake()->numberBetween(0, 1).':'.fake()->numberBetween(10000, 99999999),
-            'last_name' => fake()->userName(),
+            'last_name' => $name,
             'skill' => fake()->randomFloat(2, 500, 3000),
             'kills' => fake()->numberBetween(0, 10000),
             'deaths' => fake()->numberBetween(0, 10000),
@@ -33,11 +34,11 @@ class PlayerFactory extends Factory
     }
 
     /**
-     * Configure the model factory.
+     * Override attributes after making
      */
-    public function configure(): static
+    public function afterMaking(callable|\Closure $callback): static
     {
-        return $this->afterMaking(function (\App\Models\Player $player) {
+        return parent::afterMaking(function (\App\Models\Player $player) use ($callback) {
             // Ensure the game exists before creating the player
             \App\Models\Game::firstOrCreate(
                 ['code' => $player->game_code],
@@ -48,6 +49,25 @@ class PlayerFactory extends Factory
                         'css' => 'Counter-Strike: Source',
                         'l4d2' => 'Left 4 Dead 2',
                         'dods' => 'Day of Defeat: Source',
+                        default => $player->game_code,
+                    },
+                    'enabled' => true,
+                ]
+            );
+
+            $callback($player);
+        });
+    }
+
+    /**
+     * State for creating a player with a specific name.
+     */
+    public function withName(string $name): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'last_name' => $name,
+        ]);
+    }
                         default => $player->game_code,
                     },
                     'enabled' => true,
